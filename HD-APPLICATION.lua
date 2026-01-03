@@ -1,13 +1,48 @@
 -- Hi! I'm submitting a building mechanic like Build A Boat , an inventory system with data saving of the items and a shop system.
 
+-- ServerScriptService --> StartServer
+--// Services
+local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+--//Systems
+local PlotManager = require(ServerScriptService.SystemsServer.BuildingSystem.PlotManager)
+local Purchase = require(ServerScriptService.SystemsServer.ShopSystem.Purchase)
+local Inventory = require(ServerScriptService.SystemsServer.InventorySystem.InventoryServer)
+
+--// Packages
+local Packets = require(ReplicatedStorage.Shared.Packages.Packets)
+
+-- signals 
+
+-- give players money at the start of the game ( not data saved )
+local function OnPlayerAdded(plr : Player)
+	local money = Instance.new("IntValue")
+	money.Value = 10000
+	money.Name = "Money"
+	money.Parent = plr
+	
+	plr:SetAttribute("Launched" , false)
+end
+
+Packets.tryPurchase.OnServerEvent:Connect(Purchase.Validate)
+
+Players.PlayerAdded:Connect(OnPlayerAdded)
+PlotManager.Init()
+Inventory.Init()
+
+
 -- ServerScriptService --> SystemsServer(Folder) --> BuildingSystem(Folder)
 
--- Handles all the plot management , building and placing on players plot
 local Plots : Folder = game.Workspace:FindFirstChild("Plots")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
+
 local PlotManager = {}
+-- Handles all plot management , building and deleting on player's plot ( server sided )
+
 local available : {Model} = Plots:GetChildren()
 local ownedPlots : {Model} = {}
 local Packets = require(ReplicatedStorage.Shared.Packages.Packets)
@@ -19,9 +54,12 @@ local Data = require(ServerScriptService.SystemsServer.Configuration.Data)
 
 -- give each player that joins a plot and make it unavailable
 function PlotManager.Init()
+	
 	Packets.getPlot.OnServerInvoke = function(player)
 		return PlotManager.GetPlot(player)
 	end
+
+	-- connections
 	Players.PlayerAdded:Connect(PlotManager.OnPlayerAdded)
 	Players.PlayerRemoving:Connect(PlotManager.OnPlayerRemoving)
 	Packets.placeObject.OnServerEvent:Connect(PlotManager.Place)
@@ -30,16 +68,20 @@ function PlotManager.Init()
 end
 
 function PlotManager.OnPlayerAdded(player : Player) 
+	-- this runs when player joins 
 	if ownedPlots[player.UserId] or not player:IsA("Player") then
 		return
 	end
+
+	-- assign a new plot to new players
 	local newPlot = table.remove(available)
 	newPlot.Name = player.Name.. "'s Plot"
 	player.RespawnLocation = newPlot:FindFirstChild("SpawnLocation")
 	ownedPlots[player.UserId] = newPlot
 	
 	local char = player.Character or player.CharacterAdded:Wait()
-	
+
+	--- assign a function on player's death/respawning event
 	local function onCharacterAdded(char)
 		local humanoid : Humanoid = char:WaitForChild("Humanoid")
 		humanoid.Died:Connect(function()
@@ -48,21 +90,26 @@ function PlotManager.OnPlayerAdded(player : Player)
 	end
 	
 	task.spawn(onCharacterAdded , char)
+	-- this runs instantly with char as arguement
+	
 	player.CharacterAdded:Connect(onCharacterAdded)
 end
 
--- remove plot from player once they leave the game and make it available
+-- remove plot from player once player leave the game and make it available again
 function PlotManager.OnPlayerRemoving(player : Player)
+
+	-- sanity check 
 	if not ownedPlots[player.UserId] or not player:IsA("Player") then
 		return
 	end
-	ownedPlots[player.UserId].Name = "Plot"
-	table.insert(available , ownedPlots[player.UserId])
-	ownedPlots[player.UserId] = nil
-	
+
 	if player:GetAttribute("Launched") then
 		PlotManager.Launch(player)
 	end
+	
+	ownedPlots[player.UserId].Name = "Plot"
+	table.insert(available , ownedPlots[player.UserId])
+	ownedPlots[player.UserId] = nil
 	
 end
 
@@ -124,7 +171,7 @@ function PlotManager.Place(player : Player , objectName : string  , objectCF : C
 end
 
 function PlotManager.Delete(player : Player , object : Part)
-	local plot : Model? = ownedPlots[player.UserId]
+	local plot : Model? = PlotManager.GetPlot(player)
 	
 	if not plot or not object:IsDescendantOf(plot.Objects) then
 		return
@@ -158,17 +205,14 @@ function PlotManager.Launch(player : Player)
 				object.Anchored = false
 			end
 		end
-
 		actualPlot.Color = Color3.fromRGB(0, 0, 255)
-		local velocity = actualPlot.AssemblyLinearVelocity
-		actualPlot.AssemblyLinearVelocity = Vector3.new(50 , velocity.Y, velocity.Z)
+		actualPlot.AssemblyLinearVelocity = actualPlot.CFrame.LookVector * 50
 		
 	else
 		player:SetAttribute("Launched" , false)
 		local actualPlot : Part = plot.Plot
-		actualPlot.Color = Color3.fromRGB(40, 127, 71)
-		local velocity = actualPlot.AssemblyLinearVelocity
-		actualPlot.AssemblyLinearVelocity = Vector3.new(0 , velocity.Y, velocity.Z)
+		actualPlot.Color = Color3.fromRGB(40, 127, 71)y
+		actualPlot.AssemblyLinearVelocity = actualPlot.CFrame.LookVector * 0
 	end
 end
 
@@ -458,3 +502,5 @@ function Data.GetObjectData(objectName : string)
 end
 
 return Data
+
+
