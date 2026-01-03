@@ -34,6 +34,7 @@ function PlotManager.Init()
 	Packets.placeObject.OnServerEvent:Connect(PlotManager.Place)
 	Packets.deleteObject.OnServerEvent:Connect(PlotManager.Delete)
 	Packets.launch.OnServerEvent:Connect(PlotManager.Launch)
+	Packets.clearAll.OnServerEvent:Connect(PlotManager.ClearAll)
 end
 
 -- give player a plot when they join
@@ -62,9 +63,37 @@ function PlotManager.OnPlayerAdded(player : Player)
 	player.CharacterAdded:Connect(onCharacterAdded)
 end
 
+function PlotManager.ClearAll(player : Player)
+	-- get player's plot
+	local plot = PlotManager.GetPlot(player)
+
+	if not plot then
+		return
+	end
+
+	-- grab the objects folder
+	local objectFolder : Folder = plot:FindFirstChild("Objects")
+
+	-- no objects folder or it's empty -> stop
+	if not objectFolder or not objectFolder:GetChildren() then 
+		return
+	end
+
+	-- loop through all placed objects
+	for _, object in objectFolder:GetChildren() do
+		if object:IsA("Model") then
+			-- give item back to player
+			InventoryServer.RegisterObject(player, object)
+
+			-- delete from plot
+			object:Destroy()
+		end
+	end
+end
+
 -- cleanup when player leaves
 function PlotManager.OnPlayerRemoving(player : Player)
-	if not ownedPlots[player.UserId] or not player:IsA("Player") then
+	if not PlotManager.GetPlot(player) or not player:IsA("Player") then
 		return
 	end
 	
@@ -85,19 +114,7 @@ function PlotManager.OnCharacterAdded(player)
 	if not player:GetAttribute("Launched") then
 		return
 	end
-	
-	local plot : Model? = ownedPlots[player.UserId]
-	
-	if not plot then
-		return
-	end
-	
-	for _, object : Model in plot.Objects:GetChildren() do
-		if object:IsA("Model") and Data.GetObjectData(object.Name) then
-			object:Destroy()
-			InventoryServer.RegisterObject(player , object)
-		end
-	end	
+	PlotManager.ClearAll(player)
 	PlotManager.Launch(player)
 end
 
@@ -114,7 +131,7 @@ function PlotManager.Place(player : Player , objectName : string  , objectCF : C
 		return
 	end -- sanity check for if player really has the object
 	
-	local plot : Model? = ownedPlots[player.UserId]
+	local plot : Model? =PlotManager.GetPlot(player)
 	local objectTemplate : Model? = objectTemplates[objectName]
 	-- invalid placement
 	if not plot or not objectTemplate or not Data.GetObjectData(objectName) then
@@ -250,4 +267,3 @@ function PlotManager.Intersecting(plot : Model , objectSize : Vector3 , worldCF 
 end
 
 return PlotManager
-
