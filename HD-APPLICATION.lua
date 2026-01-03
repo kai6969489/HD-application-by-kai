@@ -74,7 +74,6 @@ function PlotManager.ClearAll(player : Player)
 	-- grab the objects folder
 	local objectFolder : Folder = plot:FindFirstChild("Objects")
 
-	-- no objects folder or it's empty -> stop
 	if not objectFolder or not objectFolder:GetChildren() then 
 		return
 	end
